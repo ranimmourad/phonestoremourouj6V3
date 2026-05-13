@@ -3,7 +3,7 @@
 ## Project Overview
 - **Name**: Phone Store Mourouj 6
 - **Goal**: Premium modern corporate website for a Tunisian tech accessories and phone/computer repair store
-- **Stack**: Hono + TypeScript + TailwindCSS (CDN) + Cloudflare Pages + D1 Database
+- **Stack**: Hono + TypeScript + TailwindCSS (CDN) + Vercel + Cloudflare Pages support
 - **Language**: French primary, Arabic support
 
 ## Features
@@ -30,7 +30,7 @@
 - Add to cart with visual feedback
 - Cart page with quantity controls
 - Checkout with delivery info form
-- Order saved to D1 database
+- Order saved to database
 - Admin notification on new orders
 
 ### Admin Dashboard (`/admin`)
@@ -48,6 +48,32 @@
 - **Admin**: `/admin`
 - **API Products**: `/api/products`
 - **API Categories**: `/api/categories`
+
+## Deployment
+
+### Vercel Deployment (Current)
+The project is configured for deployment on Vercel. 
+
+1. **Install Vercel CLI**:
+   ```bash
+   npm install -g vercel
+   ```
+
+2. **Configure Database**:
+   - Copy `.env.example` to `.env.production`
+   - Set up a PostgreSQL or MySQL database
+   - Configure `DATABASE_URL` in Vercel environment variables
+
+3. **Deploy**:
+   ```bash
+   npm run deploy
+   ```
+
+### Cloudflare Pages Alternative
+The project can also be deployed to Cloudflare Pages:
+   ```bash
+   npm run deploy-cloudflare
+   ```
 - **API Orders**: `POST /api/orders`
 
 ## Store Information

@@ -300,4 +300,12 @@ app.get('*', async (c) => {
   return c.html(html)
 })
 
+// Node.js server export for Vercel
+if (import.meta.env.PROD) {
+  const port = process.env.PORT || 3000
+  app.listen(port, () => {
+    console.log(`Server running on port ${port}`)
+  })
+}
+
 export default app
