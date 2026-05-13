@@ -1,4 +1,4 @@
-import build from '@hono/vite-build'
+import build from '@hono/vite-build/node'
 import devServer from '@hono/vite-dev-server'
 import { defineConfig } from 'vite'
 
