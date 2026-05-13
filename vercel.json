@@ -2,11 +2,15 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "public": false,
+  "functions": {
+    "api/index.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "/index.js"
+      "destination": "/api"
     }
   ]
 }
