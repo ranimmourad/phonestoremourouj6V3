@@ -384,7 +384,10 @@ async function loadProducts() {
   const res = await fetch(API + '/products', { headers: authHeaders() });
   const products = await res.json();
   const tbody = document.getElementById('productsBody');
-  tbody.innerHTML = products.map(p => '<tr class="hover:bg-gray-50"><td><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden">' + (p.image ? '<img src="' + p.image + '" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML=\\'<i class=\\\\'fas fa-box text-gray-300\\\\'></i>\\'"/>' : '<i class="fas fa-box text-gray-300"></i>') + '</div><div><div class="font-medium text-sm">' + p.name + '</div><div class="text-xs text-gray-400">' + (p.slug || '') + '</div></div></div></td><td><div class="font-semibold text-brand">' + p.price.toFixed(2) + ' DT</div>' + (p.old_price ? '<div class="text-xs text-gray-400 line-through">' + p.old_price.toFixed(2) + ' DT</div>' : '') + '</td><td class="text-sm">' + (p.category_name || '-') + '</td><td>' + (p.in_stock ? '<span class="text-green-600 text-xs font-medium"><i class="fas fa-check-circle mr-1"></i>Oui</span>' : '<span class="text-red-500 text-xs font-medium"><i class="fas fa-times-circle mr-1"></i>Non</span>') + '</td><td>' + (p.featured ? '<i class="fas fa-star text-yellow-400"></i>' : '<i class="far fa-star text-gray-300"></i>') + '</td><td><div class="flex gap-2"><button onclick=\\'editProduct(' + JSON.stringify(JSON.stringify(p)) + ')\\' class="text-brand hover:text-brand-light text-sm"><i class="fas fa-edit"></i></button><button onclick="deleteProduct(' + p.id + ')" class="text-red-400 hover:text-red-600 text-sm"><i class="fas fa-trash"></i></button></div></td></tr>').join('');
+  tbody.innerHTML = products.map(p => {
+    const pJson = JSON.stringify(p).replace(/"/g, '&quot;');
+    return '<tr class="hover:bg-gray-50"><td><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden">' + (p.image ? '<img src="' + p.image + '" class="w-full h-full object-cover" onerror="this.style.display=&quot;none&quot;">' : '<i class="fas fa-box text-gray-300"></i>') + '</div><div><div class="font-medium text-sm">' + p.name + '</div><div class="text-xs text-gray-400">' + (p.slug || '') + '</div></div></div></td><td><div class="font-semibold text-brand">' + p.price.toFixed(2) + ' DT</div>' + (p.old_price ? '<div class="text-xs text-gray-400 line-through">' + p.old_price.toFixed(2) + ' DT</div>' : '') + '</td><td class="text-sm">' + (p.category_name || '-') + '</td><td>' + (p.in_stock ? '<span class="text-green-600 text-xs font-medium"><i class="fas fa-check-circle mr-1"></i>Oui</span>' : '<span class="text-red-500 text-xs font-medium"><i class="fas fa-times-circle mr-1"></i>Non</span>') + '</td><td>' + (p.featured ? '<i class="fas fa-star text-yellow-400"></i>' : '<i class="far fa-star text-gray-300"></i>') + '</td><td><div class="flex gap-2"><button onclick="editProduct(' + pJson + ')" class="text-brand hover:text-brand-light text-sm"><i class="fas fa-edit"></i></button><button onclick="deleteProduct(' + p.id + ')" class="text-red-400 hover:text-red-600 text-sm"><i class="fas fa-trash"></i></button></div></td></tr>';
+  }).join('');
 }
 
 function openProductModal(data) {
@@ -407,7 +410,7 @@ function openProductModal(data) {
 
 function closeProductModal() { document.getElementById('productModal').classList.remove('show'); }
 
-function editProduct(jsonStr) { openProductModal(JSON.parse(jsonStr)); }
+function editProduct(data) { openProductModal(typeof data === 'string' ? JSON.parse(data) : data); }
 
 async function saveProduct(e) {
   e.preventDefault();
@@ -442,7 +445,10 @@ async function loadCategories() {
   allCategories = await res.json();
   const tbody = document.getElementById('categoriesBody');
   if (tbody) {
-    tbody.innerHTML = allCategories.map(c => '<tr class="hover:bg-gray-50"><td class="font-medium">' + c.name + (c.name_ar ? ' <span class="text-gray-400 text-xs">(' + c.name_ar + ')</span>' : '') + '</td><td class="font-mono text-xs text-gray-500">' + c.slug + '</td><td><i class="fas ' + (c.icon || 'fa-tag') + ' text-brand"></i> ' + (c.icon || '') + '</td><td>' + c.sort_order + '</td><td><div class="flex gap-2"><button onclick=\\'editCategory(' + JSON.stringify(JSON.stringify(c)) + ')\\' class="text-brand hover:text-brand-light text-sm"><i class="fas fa-edit"></i></button><button onclick="deleteCategory(' + c.id + ')" class="text-red-400 hover:text-red-600 text-sm"><i class="fas fa-trash"></i></button></div></td></tr>').join('');
+    tbody.innerHTML = allCategories.map(c => {
+      const cJson = JSON.stringify(c).replace(/"/g, '&quot;');
+      return '<tr class="hover:bg-gray-50"><td class="font-medium">' + c.name + (c.name_ar ? ' <span class="text-gray-400 text-xs">(' + c.name_ar + ')</span>' : '') + '</td><td class="font-mono text-xs text-gray-500">' + c.slug + '</td><td><i class="fas ' + (c.icon || 'fa-tag') + ' text-brand"></i> ' + (c.icon || '') + '</td><td>' + c.sort_order + '</td><td><div class="flex gap-2"><button onclick="editCategory(' + cJson + ')" class="text-brand hover:text-brand-light text-sm"><i class="fas fa-edit"></i></button><button onclick="deleteCategory(' + c.id + ')" class="text-red-400 hover:text-red-600 text-sm"><i class="fas fa-trash"></i></button></div></td></tr>';
+    }).join('');
   }
 }
 
@@ -457,7 +463,7 @@ function openCategoryModal(data) {
 }
 
 function closeCategoryModal() { document.getElementById('categoryModal').classList.remove('show'); }
-function editCategory(jsonStr) { openCategoryModal(JSON.parse(jsonStr)); }
+function editCategory(data) { openCategoryModal(typeof data === 'string' ? JSON.parse(data) : data); }
 
 async function saveCategory(e) {
   e.preventDefault();
