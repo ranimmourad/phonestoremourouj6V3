@@ -11,7 +11,7 @@ app.use('/api/*', cors())
 // ─── DB Init ───
 let dbInitialized = false
 const initDB = async (db: D1Database) => {
-  if (dbInitialized) return
+  if (!db || dbInitialized) return
   try {
     await db.prepare('SELECT 1 FROM categories LIMIT 1').first()
     dbInitialized = true
