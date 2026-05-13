@@ -1,3 +1,6 @@
 import app from '../dist/index.js';
 
-export default app;
+export default async (req, res) => {
+  return app.fetch(req);
+};
+
