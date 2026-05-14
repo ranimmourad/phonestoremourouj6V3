@@ -6,7 +6,9 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = path.join(__dirname, '../data/store.db');
 
-let db: ReturnType<typeof initSqlJs> extends Promise<infer T> ? T['Database'] : never;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let db: any = null;
+let initPromise: Promise<void> | null = null;
 
 function saveDb() {
   if (!db) return;
@@ -19,27 +21,28 @@ function saveDb() {
   fs.writeFileSync(dbPath, buffer);
 }
 
-export async function initDB(): Promise<void> {
+async function ensureDB(): Promise<void> {
   if (db) return;
-  const SQL = await initSqlJs();
+  if (initPromise) return initPromise;
 
-  if (fs.existsSync(dbPath)) {
-    const buffer = fs.readFileSync(dbPath);
-    db = new SQL.Database(buffer);
-  } else {
-    db = new SQL.Database();
-  }
-}
+  initPromise = (async () => {
+    const SQL = await initSqlJs();
 
-export function getDB() {
-  if (!db) throw new Error('Database not initialized. Call initDB() first.');
-  return db;
+    if (fs.existsSync(dbPath)) {
+      const buffer = fs.readFileSync(dbPath);
+      db = new SQL.Database(buffer);
+    } else {
+      db = new SQL.Database();
+    }
+  })();
+
+  return initPromise;
 }
 
 export function createDBProxy() {
   return {
     prepare: (sql: string) => {
-      const stmt = getDB().prepare(sql);
+      const stmt = db.prepare(sql);
       return {
         bind: (...params: any[]) => ({
           run: () => {
@@ -98,7 +101,7 @@ export function createDBProxy() {
       };
     },
     exec: (sql: string) => {
-      getDB().run(sql);
+      db.run(sql);
       saveDb();
       return { success: true };
     },
@@ -106,3 +109,4 @@ export function createDBProxy() {
 }
 
 export type D1Database = ReturnType<typeof createDBProxy>;
+export { ensureDB as initDatabase };
