@@ -19,7 +19,7 @@ npm run deploy
 
 ### ✅ What's Already Configured
 
-- **Database**: SQLite with better-sqlite3 (zero external dependencies)
+- **Database**: SQLite with sql.js (zero external dependencies)
 - **API Handler**: Node.js serverless function (`api/index.js`)
 - **Build Output**: Vite builds to `dist/index.js`
 - **Static Files**: Properly served from `/public/static`
@@ -197,7 +197,7 @@ phonestore/
 ├── data/               ← Database storage
 ├── vercel.json         ← Updated config
 ├── vite.config.ts      ← Updated for Node.js build
-├── package.json        ← Added better-sqlite3
+├── package.json        ← Added sql.js
 ├── .gitignore          ← Excludes data/ and *.db files
 └── README.md
 ```

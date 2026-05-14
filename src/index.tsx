@@ -1,3 +1,5 @@
+import { initDatabase } from './db';
+await initDB();
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { createDBProxy, type D1Database } from './db'

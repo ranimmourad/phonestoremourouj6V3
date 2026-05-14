@@ -13,9 +13,9 @@
 - ✅ Fixed: Created SQLite abstraction layer (`src/db.ts`)
 
 ### Problem 3: Native Module Bundling Error
-**Root Cause**: Vite tried to bundle `better-sqlite3` (native module)
+**Root Cause**: Vite tried to bundle `sql.js` (native module)
 - ❌ Old: No externalization config
-- ✅ Fixed: Added `external: ['better-sqlite3']` to vite.config.ts
+- ✅ Fixed: Added `external: ['sql.js']` to vite.config.ts
 
 ### Problem 4: Static File Serving
 **Root Cause**: App wasn't configured to serve from /public/static
@@ -25,7 +25,7 @@
 
 ### New Files Created
 1. **`src/db.ts`** - SQLite database abstraction layer
-   - Provides D1-like API using better-sqlite3
+   - Provides D1-like API using sql.js
    - Handles database initialization and connection pooling
 
 2. **`data/` directory** - Database storage location
@@ -35,11 +35,11 @@
 
 ### Files Updated
 1. **`package.json`**
-   - Added `better-sqlite3` dependency
+   - Added `sql.js` dependency
    - Already has correct scripts
 
 2. **`vite.config.ts`**
-   - Added `external: ['better-sqlite3']` for Rollup
+   - Added `external: ['sql.js']` for Rollup
    - Proper Node.js build configuration
    - Output optimization
 

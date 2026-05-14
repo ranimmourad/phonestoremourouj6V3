@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "hono": "^4.12.12",
-    "better-sqlite3": "^9.0.0"
+    "sql.js": "^1.14.1"
   },
   "devDependencies": {
     "@hono/vite-build": "^1.2.0",

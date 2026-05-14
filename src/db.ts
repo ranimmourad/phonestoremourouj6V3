@@ -1,17 +1,38 @@
-import Database from 'better-sqlite3';
+import initSqlJs from 'sql.js';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = path.join(__dirname, '../data/store.db');
 
-let db: Database.Database | null = null;
+let db: ReturnType<typeof initSqlJs> extends Promise<infer T> ? T['Database'] : never;
 
-export function getDB(): Database.Database {
-  if (!db) {
-    db = new Database(dbPath);
-    db.pragma('journal_mode = WAL');
+function saveDb() {
+  if (!db) return;
+  const data = db.export();
+  const buffer = Buffer.from(data);
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
+  fs.writeFileSync(dbPath, buffer);
+}
+
+export async function initDB(): Promise<void> {
+  if (db) return;
+  const SQL = await initSqlJs();
+
+  if (fs.existsSync(dbPath)) {
+    const buffer = fs.readFileSync(dbPath);
+    db = new SQL.Database(buffer);
+  } else {
+    db = new SQL.Database();
+  }
+}
+
+export function getDB() {
+  if (!db) throw new Error('Database not initialized. Call initDB() first.');
   return db;
 }
 
@@ -21,17 +42,64 @@ export function createDBProxy() {
       const stmt = getDB().prepare(sql);
       return {
         bind: (...params: any[]) => ({
-          run: () => stmt.run(...params),
-          first: () => stmt.get(...params),
-          all: () => ({ results: stmt.all(...params) }),
+          run: () => {
+            if (params.length > 0) stmt.bind(params);
+            stmt.step();
+            stmt.free();
+            saveDb();
+          },
+          first: () => {
+            if (params.length > 0) stmt.bind(params);
+            const hasRow = stmt.step();
+            if (!hasRow) {
+              stmt.free();
+              return null;
+            }
+            const row = stmt.getAsObject();
+            stmt.free();
+            return row;
+          },
+          all: () => {
+            if (params.length > 0) stmt.bind(params);
+            const results: any[] = [];
+            while (stmt.step()) {
+              results.push(stmt.getAsObject());
+            }
+            stmt.free();
+            return { results };
+          },
         }),
-        run: (...params: any[]) => stmt.run(...params),
-        first: (...params: any[]) => stmt.get(...params),
-        all: (...params: any[]) => ({ results: stmt.all(...params) }),
+        run: (...params: any[]) => {
+          if (params.length > 0) stmt.bind(params);
+          stmt.step();
+          stmt.free();
+          saveDb();
+        },
+        first: (...params: any[]) => {
+          if (params.length > 0) stmt.bind(params);
+          const hasRow = stmt.step();
+          if (!hasRow) {
+            stmt.free();
+            return null;
+          }
+          const row = stmt.getAsObject();
+          stmt.free();
+          return row;
+        },
+        all: (...params: any[]) => {
+          if (params.length > 0) stmt.bind(params);
+          const results: any[] = [];
+          while (stmt.step()) {
+            results.push(stmt.getAsObject());
+          }
+          stmt.free();
+          return { results };
+        },
       };
     },
     exec: (sql: string) => {
-      getDB().exec(sql);
+      getDB().run(sql);
+      saveDb();
       return { success: true };
     },
   };
