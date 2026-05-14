@@ -2,13 +2,6 @@
   "framework": null,
   "buildCommand": "npm run build",
   "installCommand": "npm install",
-  "functions": {
-    "api/index.js": {
-      "runtime": "node@18.x",
-      "memory": 1024,
-      "maxDuration": 30
-    }
-  },
   "rewrites": [
     {
       "source": "/(.*)",
