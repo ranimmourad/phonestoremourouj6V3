@@ -7,7 +7,7 @@ type Variables = { admin: boolean }
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 
-app.use('/api/*', cors())
+app.use('/api/*', cors()) 
 
 // ─── DB Init ───
 let dbInitialized = false
