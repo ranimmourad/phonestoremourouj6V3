@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { createDBProxy, type D1Database } from './db'
 
-type Bindings = { DB: D1Database }
+type Bindings = { DB?: D1Database }
 type Variables = { admin: boolean }
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
@@ -10,14 +11,16 @@ app.use('/api/*', cors())
 
 // ─── DB Init ───
 let dbInitialized = false
-const initDB = async (db: D1Database) => {
-  if (!db || dbInitialized) return
+const db = createDBProxy()
+
+const initDB = async () => {
+  if (dbInitialized) return
   try {
-    await db.prepare('SELECT 1 FROM categories LIMIT 1').first()
+    db.prepare('SELECT 1 FROM categories LIMIT 1').all()
     dbInitialized = true
   } catch {
     // Tables don't exist, create them
-    await db.exec(`
+    db.exec(`
       CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, name_ar TEXT, slug TEXT UNIQUE NOT NULL, icon TEXT, image TEXT, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
       CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, name_ar TEXT, slug TEXT UNIQUE NOT NULL, description TEXT, price REAL NOT NULL, old_price REAL, category_id INTEGER, image TEXT, images TEXT, in_stock INTEGER DEFAULT 1, featured INTEGER DEFAULT 0, badge TEXT, sort_order INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (category_id) REFERENCES categories(id));
       CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY AUTOINCREMENT, order_number TEXT UNIQUE NOT NULL, customer_name TEXT NOT NULL, customer_phone TEXT NOT NULL, customer_address TEXT NOT NULL, customer_note TEXT, items TEXT NOT NULL, total REAL NOT NULL, status TEXT DEFAULT 'pending', seen INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
@@ -28,7 +31,7 @@ const initDB = async (db: D1Database) => {
       CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
     `)
     // Seed admin
-    await db.prepare("INSERT OR IGNORE INTO admins (username, password_hash) VALUES ('admin', 'admin123')").run()
+    db.prepare("INSERT OR IGNORE INTO admins (username, password_hash) VALUES ('admin', 'admin123')").run()
     // Seed categories
     const cats = [
       ['Chargeurs','شواحن','chargeurs','fa-bolt',1],['Câbles USB','كوابل USB','cables-usb','fa-plug',2],
@@ -39,7 +42,7 @@ const initDB = async (db: D1Database) => {
       ['Accessoires PC','إكسسوارات كمبيوتر','accessoires-pc','fa-laptop',11]
     ]
     for (const c of cats) {
-      await db.prepare('INSERT OR IGNORE INTO categories (name,name_ar,slug,icon,sort_order) VALUES (?,?,?,?,?)').bind(...c).run()
+      db.prepare('INSERT OR IGNORE INTO categories (name,name_ar,slug,icon,sort_order) VALUES (?,?,?,?,?)').bind(...c as any).run()
     }
     // Seed products
     const prods: [string,string,string,number,number,number,number,number,string|null,string][] = [
@@ -69,15 +72,15 @@ const initDB = async (db: D1Database) => {
       ['Tapis de Souris XXL Gaming','tapis-souris-xxl','Tapis de souris gaming XXL 80x30cm avec éclairage RGB.',40,60,10,1,1,'RGB','/static/products/mousepad.svg'],
     ]
     for (const p of prods) {
-      await db.prepare('INSERT OR IGNORE INTO products (name,slug,description,price,old_price,category_id,in_stock,featured,badge,image) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(...p).run()
+      db.prepare('INSERT OR IGNORE INTO products (name,slug,description,price,old_price,category_id,in_stock,featured,badge,image) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(...p).run()
     }
     dbInitialized = true
   }
 }
 
-// Auto-init DB on every request (checks once, fast after first)
+// Auto-init DB on every request
 app.use('*', async (c, next) => {
-  await initDB(c.env.DB)
+  initDB()
   await next()
 })
 
@@ -87,7 +90,7 @@ const authMiddleware = async (c: any, next: any) => {
   if (!token) return c.json({ error: 'Non autorisé' }, 401)
   try {
     const [user, pass] = atob(token).split(':')
-    const admin = await c.env.DB.prepare('SELECT * FROM admins WHERE username = ? AND password_hash = ?').bind(user, pass).first()
+    const admin = db.prepare('SELECT * FROM admins WHERE username = ? AND password_hash = ?').bind(user, pass).first()
     if (!admin) return c.json({ error: 'Identifiants invalides' }, 401)
     c.set('admin', true)
     await next()
@@ -98,8 +101,8 @@ const authMiddleware = async (c: any, next: any) => {
 
 // Get all categories
 app.get('/api/categories', async (c) => {
-  const { results } = await c.env.DB.prepare('SELECT * FROM categories ORDER BY sort_order').all()
-  return c.json(results)
+  const result = db.prepare('SELECT * FROM categories ORDER BY sort_order').all()
+  return c.json((result as any).results)
 })
 
 // Get all products (with filters)
@@ -120,14 +123,14 @@ app.get('/api/products', async (c) => {
   query += ' ORDER BY p.featured DESC, p.sort_order, p.created_at DESC LIMIT ? OFFSET ?'
   params.push(limit, offset)
 
-  const { results } = await c.env.DB.prepare(query).bind(...params).all()
-  return c.json(results)
+  const result = db.prepare(query).bind(...params).all()
+  return c.json((result as any).results)
 })
 
 // Get single product
 app.get('/api/products/:slug', async (c) => {
   const slug = c.req.param('slug')
-  const product = await c.env.DB.prepare('SELECT p.*, c.name as category_name, c.slug as category_slug FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.slug = ?').bind(slug).first()
+  const product = db.prepare('SELECT p.*, c.name as category_name, c.slug as category_slug FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.slug = ?').bind(slug).first()
   if (!product) return c.json({ error: 'Produit non trouvé' }, 404)
   return c.json(product)
 })
@@ -143,12 +146,12 @@ app.post('/api/orders', async (c) => {
 
   const orderNumber = 'PS-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substring(2, 5).toUpperCase()
 
-  await c.env.DB.prepare(
+  db.prepare(
     'INSERT INTO orders (order_number, customer_name, customer_phone, customer_address, customer_note, items, total) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).bind(orderNumber, customer_name, customer_phone, customer_address, customer_note || '', JSON.stringify(items), total).run()
 
   // Create notification
-  await c.env.DB.prepare(
+  db.prepare(
     'INSERT INTO notifications (type, message, data) VALUES (?, ?, ?)'
   ).bind('new_order', `Nouvelle commande ${orderNumber} de ${customer_name}`, JSON.stringify({ order_number: orderNumber, total })).run()
 
@@ -158,7 +161,7 @@ app.post('/api/orders', async (c) => {
 // ─── Admin Auth ───
 app.post('/api/admin/login', async (c) => {
   const { username, password } = await c.req.json()
-  const admin = await c.env.DB.prepare('SELECT * FROM admins WHERE username = ? AND password_hash = ?').bind(username, password).first()
+  const admin = db.prepare('SELECT * FROM admins WHERE username = ? AND password_hash = ?').bind(username, password).first()
   if (!admin) return c.json({ error: 'Identifiants invalides' }, 401)
   const token = btoa(`${username}:${password}`)
   return c.json({ success: true, token })
@@ -168,20 +171,20 @@ app.post('/api/admin/login', async (c) => {
 
 // Dashboard stats
 app.get('/api/admin/stats', authMiddleware, async (c) => {
-  const totalProducts = await c.env.DB.prepare('SELECT COUNT(*) as count FROM products').first()
-  const totalOrders = await c.env.DB.prepare('SELECT COUNT(*) as count FROM orders').first()
-  const pendingOrders = await c.env.DB.prepare("SELECT COUNT(*) as count FROM orders WHERE status = 'pending'").first()
-  const totalRevenue = await c.env.DB.prepare('SELECT COALESCE(SUM(total), 0) as sum FROM orders').first()
-  const recentOrders = await c.env.DB.prepare('SELECT * FROM orders ORDER BY created_at DESC LIMIT 10').all()
-  const unseenNotifications = await c.env.DB.prepare('SELECT COUNT(*) as count FROM notifications WHERE seen = 0').first()
+  const totalProducts = db.prepare('SELECT COUNT(*) as count FROM products').first() as any
+  const totalOrders = db.prepare('SELECT COUNT(*) as count FROM orders').first() as any
+  const pendingOrders = db.prepare("SELECT COUNT(*) as count FROM orders WHERE status = 'pending'").first() as any
+  const totalRevenue = db.prepare('SELECT COALESCE(SUM(total), 0) as sum FROM orders').first() as any
+  const recentOrders = db.prepare('SELECT * FROM orders ORDER BY created_at DESC LIMIT 10').all() as any
+  const unseenNotifications = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE seen = 0').first() as any
 
   return c.json({
-    totalProducts: (totalProducts as any)?.count || 0,
-    totalOrders: (totalOrders as any)?.count || 0,
-    pendingOrders: (pendingOrders as any)?.count || 0,
-    totalRevenue: (totalRevenue as any)?.sum || 0,
-    recentOrders: recentOrders.results,
-    unseenNotifications: (unseenNotifications as any)?.count || 0
+    totalProducts: totalProducts?.count || 0,
+    totalOrders: totalOrders?.count || 0,
+    pendingOrders: pendingOrders?.count || 0,
+    totalRevenue: totalRevenue?.sum || 0,
+    recentOrders: recentOrders?.results,
+    unseenNotifications: unseenNotifications?.count || 0
   })
 })
 
@@ -192,41 +195,41 @@ app.get('/api/admin/orders', authMiddleware, async (c) => {
   const params: any[] = []
   if (status) { query += ' WHERE status = ?'; params.push(status) }
   query += ' ORDER BY created_at DESC'
-  const { results } = await c.env.DB.prepare(query).bind(...params).all()
-  return c.json(results)
+  const result = db.prepare(query).bind(...params).all() as any
+  return c.json(result.results)
 })
 
 // Update order status
 app.patch('/api/admin/orders/:id', authMiddleware, async (c) => {
   const id = c.req.param('id')
   const { status } = await c.req.json()
-  await c.env.DB.prepare('UPDATE orders SET status = ? WHERE id = ?').bind(status, id).run()
+  db.prepare('UPDATE orders SET status = ? WHERE id = ?').bind(status, id).run()
   return c.json({ success: true })
 })
 
 // Get notifications
 app.get('/api/admin/notifications', authMiddleware, async (c) => {
-  const { results } = await c.env.DB.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 50').all()
-  return c.json(results)
+  const result = db.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 50').all() as any
+  return c.json(result.results)
 })
 
 // Mark notifications as seen
 app.post('/api/admin/notifications/seen', authMiddleware, async (c) => {
-  await c.env.DB.prepare('UPDATE notifications SET seen = 1 WHERE seen = 0').run()
+  db.prepare('UPDATE notifications SET seen = 1 WHERE seen = 0').run()
   return c.json({ success: true })
 })
 
 // Admin CRUD Products
 app.get('/api/admin/products', authMiddleware, async (c) => {
-  const { results } = await c.env.DB.prepare('SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.created_at DESC').all()
-  return c.json(results)
+  const result = db.prepare('SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.created_at DESC').all() as any
+  return c.json(result.results)
 })
 
 app.post('/api/admin/products', authMiddleware, async (c) => {
   const body = await c.req.json()
   const { name, name_ar, slug, description, price, old_price, category_id, image, in_stock, featured, badge } = body
   const finalSlug = slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-  await c.env.DB.prepare(
+  db.prepare(
     'INSERT INTO products (name, name_ar, slug, description, price, old_price, category_id, image, in_stock, featured, badge) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).bind(name, name_ar || '', finalSlug, description || '', price, old_price || null, category_id, image || '', in_stock ?? 1, featured ?? 0, badge || null).run()
   return c.json({ success: true })
@@ -236,39 +239,39 @@ app.put('/api/admin/products/:id', authMiddleware, async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json()
   const { name, name_ar, description, price, old_price, category_id, image, in_stock, featured, badge } = body
-  await c.env.DB.prepare(
+  db.prepare(
     'UPDATE products SET name=?, name_ar=?, description=?, price=?, old_price=?, category_id=?, image=?, in_stock=?, featured=?, badge=? WHERE id=?'
   ).bind(name, name_ar || '', description || '', price, old_price || null, category_id, image || '', in_stock ?? 1, featured ?? 0, badge || null, id).run()
   return c.json({ success: true })
 })
 
 app.delete('/api/admin/products/:id', authMiddleware, async (c) => {
-  await c.env.DB.prepare('DELETE FROM products WHERE id = ?').bind(c.req.param('id')).run()
+  db.prepare('DELETE FROM products WHERE id = ?').bind(c.req.param('id')).run()
   return c.json({ success: true })
 })
 
 // Admin CRUD Categories
 app.get('/api/admin/categories', authMiddleware, async (c) => {
-  const { results } = await c.env.DB.prepare('SELECT * FROM categories ORDER BY sort_order').all()
-  return c.json(results)
+  const result = db.prepare('SELECT * FROM categories ORDER BY sort_order').all() as any
+  return c.json(result.results)
 })
 
 app.post('/api/admin/categories', authMiddleware, async (c) => {
   const { name, name_ar, slug, icon, sort_order } = await c.req.json()
   const finalSlug = slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-  await c.env.DB.prepare('INSERT INTO categories (name, name_ar, slug, icon, sort_order) VALUES (?, ?, ?, ?, ?)').bind(name, name_ar || '', finalSlug, icon || '', sort_order || 0).run()
+  db.prepare('INSERT INTO categories (name, name_ar, slug, icon, sort_order) VALUES (?, ?, ?, ?, ?)').bind(name, name_ar || '', finalSlug, icon || '', sort_order || 0).run()
   return c.json({ success: true })
 })
 
 app.put('/api/admin/categories/:id', authMiddleware, async (c) => {
   const id = c.req.param('id')
   const { name, name_ar, icon, sort_order } = await c.req.json()
-  await c.env.DB.prepare('UPDATE categories SET name=?, name_ar=?, icon=?, sort_order=? WHERE id=?').bind(name, name_ar || '', icon || '', sort_order || 0, id).run()
+  db.prepare('UPDATE categories SET name=?, name_ar=?, icon=?, sort_order=? WHERE id=?').bind(name, name_ar || '', icon || '', sort_order || 0, id).run()
   return c.json({ success: true })
 })
 
 app.delete('/api/admin/categories/:id', authMiddleware, async (c) => {
-  await c.env.DB.prepare('DELETE FROM categories WHERE id = ?').bind(c.req.param('id')).run()
+  db.prepare('DELETE FROM categories WHERE id = ?').bind(c.req.param('id')).run()
   return c.json({ success: true })
 })
 
